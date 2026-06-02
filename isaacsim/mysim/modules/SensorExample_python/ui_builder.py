@@ -138,6 +138,14 @@ class UIBuilder():
                 self._use_camera = False
                 self.wrapped_ui_elements.append(camera_check_box)
 
+                ros2_camera_check_box = CheckBox(
+                    "Camera → ROS2",
+                    default_value=False,
+                    tooltip=" Publish each camera's image_raw and camera_info to ROS2 (requires Underwater Camera to be enabled)",
+                    on_click_fn=self._on_ros2_camera_checkbox_click_fn,
+                )
+                self.wrapped_ui_elements.append(ros2_camera_check_box)
+
                 DVL_check_box = CheckBox(
                     'DVL',
                     default_value=False,
@@ -229,11 +237,14 @@ class UIBuilder():
         self._sonar = None
         self._sonar_trans = np.array([0.3,0.0, 0.3])
         self._cams = [ None, None ]
+        # Unique name per camera — used as the ROS2 topic namespace: /{name}/image_raw
+        self._cams_names = [ 'cam_left', 'cam_right' ]
         #x, y, z so forward 0.3, right 0.0, up 0.1  
         self._cams_trans = [ np.array([0.3,0.05, 0.1]), np.array([0.3,-0.05, 0.1]) ]
         #this is mm
         self._cams_focal_length = [ 2.35, 2.35 ]
         self._cams_res = [ [1280, 800], [1280, 800] ]
+        self._use_ros2_camera = False
 
         self._DVL = None
         self._DVL_trans = np.array([0,0,-0.1])
@@ -321,12 +332,17 @@ class UIBuilder():
         if self._use_camera:
             from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
 
-            self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
-                                    resolution=[1920,1080],
-                                    translation=self._cam_trans)
-            #this input is in meters
-            self._cam.set_focal_length(100 * self._cam_focal_length)
-            self._cam.set_clipping_range(0.1, 100)
+            for i in range(len(self._cams)):
+                self._cams[i] = UW_Camera(
+                    prim_path=robot_prim_path + f'/UW_camera_{i}',
+                    name=self._cams_names[i],
+                    resolution=self._cams_res[i],
+                    translation=self._cams_trans[i],
+                    ros2_publish=self._use_ros2_camera,
+                )
+                # set_focal_length expects mm (100 * focal_length_in_mm gives cm — keep consistent with original)
+                self._cams[i].set_focal_length(100 * self._cams_focal_length[i])
+                self._cams[i].set_clipping_range(0.1, 100)
             
         if self._use_DVL:
             from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
@@ -360,7 +376,7 @@ class UIBuilder():
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._ctrl_mode)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._cams, self._DVL, self._baro, self._ctrl_mode)
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.
@@ -432,6 +448,10 @@ class UIBuilder():
 
     def _on_camera_checkbox_click_fn(self, model):
         self._use_camera = model
+        print('Reload the scene for changes to take effect.')
+
+    def _on_ros2_camera_checkbox_click_fn(self, model):
+        self._use_ros2_camera = model
         print('Reload the scene for changes to take effect.')
 
     def _on_DVL_checkbox_click_fn(self, model):

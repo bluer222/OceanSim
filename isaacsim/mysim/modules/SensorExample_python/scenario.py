@@ -11,7 +11,7 @@ class MHL_Sensor_Example_Scenario():
     def __init__(self):
         self._rob = None
         self._sonar = None
-        self._cam = None
+        self._cams = []
         self._DVL = None
         self._baro = None
 
@@ -20,17 +20,18 @@ class MHL_Sensor_Example_Scenario():
         self._running_scenario = False
         self._time = 0.0
 
-    def setup_scenario(self, rob, sonar, cam, DVL, baro, ctrl_mode):
+    def setup_scenario(self, rob, sonar, cams, DVL, baro, ctrl_mode):
         self._rob = rob
         self._sonar = sonar
-        self._cam = cam
+        self._cams = cams  # list of UW_Camera instances (may contain None entries if not loaded)
         self._DVL = DVL
         self._baro = baro
         self._ctrl_mode = ctrl_mode
         if self._sonar is not None:
             self._sonar.sonar_initialize(include_unlabelled=True)
-        if self._cam is not None:
-            self._cam.initialize()
+        for cam in self._cams:
+            if cam is not None:
+                cam.initialize()
         if self._DVL is not None:
             self._DVL_reading = [0.0, 0.0, 0.0]
         if self._baro is not None:
@@ -109,8 +110,9 @@ class MHL_Sensor_Example_Scenario():
         # close() will detach annotator from render product and clear the cache.
         if self._sonar is not None:
             self._sonar.close()
-        if self._cam is not None:
-            self._cam.close()
+        for cam in self._cams:
+            if cam is not None:
+                cam.close()
 
         # clear the keyboard subscription
         if self._ctrl_mode=="Manual control":
@@ -119,7 +121,7 @@ class MHL_Sensor_Example_Scenario():
 
         self._rob = None
         self._sonar = None
-        self._cam = None
+        self._cams = []
         self._DVL = None
         self._baro = None
         self._running_scenario = False
@@ -136,8 +138,9 @@ class MHL_Sensor_Example_Scenario():
         
         if self._sonar is not None:
             self._sonar.make_sonar_data()
-        if self._cam is not None:
-            self._cam.render()
+        for cam in self._cams:
+            if cam is not None:
+                cam.render()
         if self._DVL is not None:
             self._DVL_reading = self._DVL.get_linear_vel()
         if self._baro is not None:

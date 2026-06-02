@@ -1,6 +1,8 @@
 # Omniverse Import
 import omni.replicator.core as rep
 from omni.replicator.core.scripts.functional import write_image
+import omni.graph.core as og
+import omni.usd
 import omni.ui as ui
 
 # Isaac sim import
@@ -25,7 +27,8 @@ class UW_Camera(Camera):
                  position = None, 
                  orientation = None, 
                  translation = None, 
-                 render_product_path = None):
+                 render_product_path = None,
+                 ros2_publish = False):
         
         """Initialize an underwater camera sensor.
     
@@ -56,6 +59,8 @@ class UW_Camera(Camera):
         self._prim_path = prim_path
         self._res = resolution
         self._writing = False
+        self._ros2_publish = ros2_publish
+        self._ros2_graph_path = None
 
         super().__init__(prim_path, name, frequency, dt, resolution, position, orientation, translation, render_product_path)
 
@@ -116,8 +121,11 @@ class UW_Camera(Camera):
         if writing_dir is not None:
             self._writing = True
             self._writing_backend = rep.BackendDispatch({"paths": {"out_dir": writing_dir}})
+
+        if self._ros2_publish:
+            self._setup_ros2_graph()
         
-        print(f'[{self._name}] Initialized successfully. Data writing: {self._writing}')
+        print(f'[{self._name}] Initialized successfully. Data writing: {self._writing}. ROS2: {self._ros2_publish}')
     
     def render(self):
         """Process and display a single frame with underwater effects.
@@ -184,6 +192,7 @@ class UW_Camera(Camera):
         Note:
             - Required for proper shutdown when done using the sensor
             - Also closes viewport window if one was created
+            - Removes the ROS2 OmniGraph if ros2_publish was enabled
         """
         self._rgba_annot.detach(self._render_product_path)
         self._depth_annot.detach(self._render_product_path)
@@ -193,6 +202,13 @@ class UW_Camera(Camera):
 
         if self._viewport:
             self.ui_destroy()
+
+        if self._ros2_graph_path is not None:
+            stage = omni.usd.get_context().get_stage()
+            if stage and stage.GetPrimAtPath(self._ros2_graph_path).IsValid():
+                stage.RemovePrim(self._ros2_graph_path)
+                print(f'[{self._name}] ROS2 graph removed: {self._ros2_graph_path}')
+            self._ros2_graph_path = None
             
         print(f'[{self._name}] Annotator detached. AnnotatorCache cleaned.')
     
@@ -207,5 +223,50 @@ class UW_Camera(Camera):
         for elem in self.wrapped_ui_elements:
             elem.destroy()
 
-        
-       
+    def _setup_ros2_graph(self):
+        """Build an OmniGraph that publishes RGB image and camera info to ROS2.
+
+        Topics published:
+            /{name}/image_raw  (sensor_msgs/Image)
+            /{name}/camera_info (sensor_msgs/CameraInfo)
+
+        The graph ticks automatically on every simulation playback step.
+        Call close() to tear it down.
+        """
+        keys = og.Controller.Keys
+        # Sanitise the camera name for use as a USD prim path segment
+        safe_name = self._name.replace(' ', '_').replace('-', '_')
+        self._ros2_graph_path = f"/Graph/ROS2_{safe_name}"
+
+        og.Controller.edit(
+            {"graph_path": self._ros2_graph_path, "evaluator_name": "execution"},
+            {
+                keys.CREATE_NODES: [
+                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                    ("Context",        "isaacsim.ros2.bridge.ROS2Context"),
+                    ("CameraInfo",     "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+                    ("RGBPublish",     "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ],
+                keys.SET_VALUES: [
+                    # Camera info
+                    ("CameraInfo.inputs:renderProductPath",       self._render_product_path),
+                    ("CameraInfo.inputs:topicName",               f"{self._name}/camera_info"),
+                    ("CameraInfo.inputs:frameId",                 self._name),
+                    ("CameraInfo.inputs:resetSimulationTimeOnStop", True),
+                    # RGB image
+                    ("RGBPublish.inputs:renderProductPath",       self._render_product_path),
+                    ("RGBPublish.inputs:topicName",               f"{self._name}/image_raw"),
+                    ("RGBPublish.inputs:type",                    "rgb"),
+                    ("RGBPublish.inputs:frameId",                 self._name),
+                    ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
+                ],
+                keys.CONNECT: [
+                    ("OnPlaybackTick.outputs:tick",   "CameraInfo.inputs:execIn"),
+                    ("OnPlaybackTick.outputs:tick",   "RGBPublish.inputs:execIn"),
+                    ("Context.outputs:context",       "CameraInfo.inputs:context"),
+                    ("Context.outputs:context",       "RGBPublish.inputs:context"),
+                ],
+            },
+        )
+        print(f'[{self._name}] ROS2 graph created at {self._ros2_graph_path}')
+        print(f'[{self._name}] Publishing: /{self._name}/image_raw  |  /{self._name}/camera_info')
