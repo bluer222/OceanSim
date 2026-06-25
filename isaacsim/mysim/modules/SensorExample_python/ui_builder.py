@@ -138,14 +138,6 @@ class UIBuilder():
                 self._use_camera = False
                 self.wrapped_ui_elements.append(camera_check_box)
 
-                ros2_camera_check_box = CheckBox(
-                    "Camera → ROS2",
-                    default_value=False,
-                    tooltip=" Publish each camera's image_raw and camera_info to ROS2 (requires Underwater Camera to be enabled)",
-                    on_click_fn=self._on_ros2_camera_checkbox_click_fn,
-                )
-                self.wrapped_ui_elements.append(ros2_camera_check_box)
-
                 DVL_check_box = CheckBox(
                     'DVL',
                     default_value=False,
@@ -239,10 +231,10 @@ class UIBuilder():
         self._cams = [ None, None ]
         # Unique name per camera — used as the ROS2 topic namespace: /{name}/image_raw
         self._cams_names = [ 'cam_left', 'cam_right' ]
-        self._cams_greyscale = [ True, True ]
+        self._cams_greyscale = [ False, False ]
         #x, y, z so forward 0.3, right 0.0, up 0.1  
         #the two 0.06's combined give a total baseline of 0.12m/12cm
-        self._cams_trans = [ np.array([0.3,0.06, 0.1]), np.array([0.3,-0.06, 0.1]) ]
+        self._cams_trans = [ np.array([0.3,-0.06, 0.1]), np.array([0.3,0.06, 0.1]) ]
         self._cams_calibration = [
             {
                 'fx':1400.64,
@@ -270,7 +262,7 @@ class UIBuilder():
         #this is mm
         self._cams_focal_length = [ 2.35, 2.35 ]
         self._cams_res = [ [1920, 1080], [1920, 1080] ]
-        self._use_ros2_camera = False
+        self._use_ros2_camera = True
 
         self._DVL = None
         self._DVL_trans = np.array([0,0,-0.1])
@@ -297,6 +289,7 @@ class UIBuilder():
 
             # add MHL scene as reference
             MHL_prim_path = '/World/mhl'
+            #MHL_usd_path = get_oceansim_assets_path() + "/collected_MHL/mhl_water.usd" 
             MHL_usd_path = get_oceansim_assets_path() + "/collected_MHL/mhl_scaled.usd"
             add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
             # Toggle MHL mesh's collider
@@ -488,10 +481,6 @@ class UIBuilder():
 
     def _on_camera_checkbox_click_fn(self, model):
         self._use_camera = model
-        print('Reload the scene for changes to take effect.')
-
-    def _on_ros2_camera_checkbox_click_fn(self, model):
-        self._use_ros2_camera = model
         print('Reload the scene for changes to take effect.')
 
     def _on_DVL_checkbox_click_fn(self, model):

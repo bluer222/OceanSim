@@ -29,6 +29,20 @@ def UW_render(raw_image: wp.array(ndim=3, dtype=wp.uint8),
     uw_image[i,j,3] = raw_image[i,j,3]
 
 
+@wp.kernel
+def rgba_to_greyscale(image: wp.array(ndim=3, dtype=wp.uint8)):
+    i,j = wp.tid()
+    grey = (
+        wp.float32(image[i,j,0]) * wp.float32(0.299)
+        + wp.float32(image[i,j,1]) * wp.float32(0.587)
+        + wp.float32(image[i,j,2]) * wp.float32(0.114)
+    )
+    grey_uint8 = wp.uint8(wp.clamp(grey, wp.float32(0), wp.float32(255)))
+    image[i,j,0] = grey_uint8
+    image[i,j,1] = grey_uint8
+    image[i,j,2] = grey_uint8
+
+
 
 
     

@@ -17,6 +17,7 @@ icon = "data/icon.png"
 
 
 [dependencies]
+"isaacsim.ros2.bridge" = {}
 "omni.kit.uiapp" = {}
 "omni.isaac.ui" = {}
 "omni.isaac.core" = {}
