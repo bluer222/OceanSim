@@ -28,7 +28,8 @@ class UW_Camera(Camera):
                  orientation = None, 
                  translation = None, 
                  render_product_path = None,
-                 ros2_publish = False):
+                 ros2_publish = False,
+                 greyscale = False):
         
         """Initialize an underwater camera sensor.
     
@@ -61,6 +62,7 @@ class UW_Camera(Camera):
         self._writing = False
         self._ros2_publish = ros2_publish
         self._ros2_graph_path = None
+        self._greyscale = greyscale
 
         super().__init__(prim_path, name, frequency, dt, resolution, position, orientation, translation, render_product_path)
 
@@ -238,6 +240,8 @@ class UW_Camera(Camera):
         safe_name = self._name.replace(' ', '_').replace('-', '_')
         self._ros2_graph_path = f"/Graph/ROS2_{safe_name}"
 
+        #set the graph to publish mono8 if greyscale=True
+         
         og.Controller.edit(
             {"graph_path": self._ros2_graph_path, "evaluator_name": "execution"},
             {

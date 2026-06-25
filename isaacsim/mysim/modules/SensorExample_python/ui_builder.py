@@ -21,7 +21,7 @@ from isaacsim.core.utils.extensions import get_extension_path
 # Custom import
 from .scenario import MHL_Sensor_Example_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
-from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
+from isaacsim.mysim.utils.assets_utils import get_oceansim_assets_path
 
 class UIBuilder():
     def __init__(self):
@@ -239,11 +239,37 @@ class UIBuilder():
         self._cams = [ None, None ]
         # Unique name per camera — used as the ROS2 topic namespace: /{name}/image_raw
         self._cams_names = [ 'cam_left', 'cam_right' ]
+        self._cams_greyscale = [ True, True ]
         #x, y, z so forward 0.3, right 0.0, up 0.1  
-        self._cams_trans = [ np.array([0.3,0.05, 0.1]), np.array([0.3,-0.05, 0.1]) ]
+        #the two 0.06's combined give a total baseline of 0.12m/12cm
+        self._cams_trans = [ np.array([0.3,0.06, 0.1]), np.array([0.3,-0.06, 0.1]) ]
+        self._cams_calibration = [
+            {
+                'fx':1400.64,
+                'fy':1400.64,
+                'cx':1055.26,
+                'cy':584.383,
+                'k1':-0.169328,
+                'k2':0.0215448,
+                'p1':0,
+                'p2':0,
+                'k3':0,
+            },
+            {
+                'fx':1398.9,
+                'fy':1398.9,
+                'cx':1041.9,
+                'cy':613.308,
+                'k1':-0.170978,
+                'k2':0.0246132,
+                'p1':0,
+                'p2':0,
+                'k3':0,
+            }
+        ]
         #this is mm
         self._cams_focal_length = [ 2.35, 2.35 ]
-        self._cams_res = [ [1280, 800], [1280, 800] ]
+        self._cams_res = [ [1920, 1080], [1920, 1080] ]
         self._use_ros2_camera = False
 
         self._DVL = None
@@ -320,7 +346,7 @@ class UIBuilder():
         
 
         if self._use_sonar:
-            from isaacsim.oceansim.sensors.ImagingSonarSensor import ImagingSonarSensor
+            from isaacsim.mysim.sensors.ImagingSonarSensor import ImagingSonarSensor
             self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                             translation=self._sonar_trans,
                                             orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
@@ -330,7 +356,7 @@ class UIBuilder():
                                             )
             
         if self._use_camera:
-            from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
+            from isaacsim.mysim.sensors.UW_Camera import UW_Camera
 
             for i in range(len(self._cams)):
                 self._cams[i] = UW_Camera(
@@ -339,13 +365,27 @@ class UIBuilder():
                     resolution=self._cams_res[i],
                     translation=self._cams_trans[i],
                     ros2_publish=self._use_ros2_camera,
+                    greyscale=self._cams_greyscale[i]
                 )
-                # set_focal_length expects mm (100 * focal_length_in_mm gives cm — keep consistent with original)
-                self._cams[i].set_focal_length(100 * self._cams_focal_length[i])
-                self._cams[i].set_clipping_range(0.1, 100)
+
+                self._cams[i].set_opencv_pinhole_properties(
+                    cx=self._cams_calibration[i]["cx"],
+                    cy=self._cams_calibration[i]["cy"],
+                    fx=self._cams_calibration[i]["fx"],
+                    fy=self._cams_calibration[i]["fy"],
+                    pinhole=[
+                        self._cams_calibration[i]["k1"],
+                        self._cams_calibration[i]["k2"],
+                        self._cams_calibration[i]["p1"],
+                        self._cams_calibration[i]["p2"],
+                        self._cams_calibration[i]["k3"],
+                        0.0, 0.0, 0.0,  # k4, k5, k6
+                        0.0, 0.0, 0.0, 0.0,  # s1-s4
+                    ],
+                )            
             
         if self._use_DVL:
-            from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
+            from isaacsim.mysim.sensors.DVLsensor import DVLsensor
 
             self._DVL = DVLsensor(max_range=10)
             self._DVL.attachDVL(rigid_body_path=robot_prim_path,
@@ -353,7 +393,7 @@ class UIBuilder():
             self._DVL.add_debug_lines()
             
         if self._use_baro:
-            from isaacsim.oceansim.sensors.BarometerSensor import BarometerSensor
+            from isaacsim.mysim.sensors.BarometerSensor import BarometerSensor
 
             self._baro = BarometerSensor(prim_path=robot_prim_path + '/Baro',
                                         water_surface_z=self._water_surface)
